@@ -35,7 +35,7 @@ public class UserController {
             @RequestParam(defaultValue = "20") int limit
     ) {
         PagedResponse<UserResponse> response = userService.getAllUsers(search, role, isActive, page, limit);
-        return ResponseEntity.ok(ApiResponse.success((PagedResponse<UserResponse>) response.getItems(), response.getPagination()));
+        return ResponseEntity.ok(ApiResponse.success(response, response.getPagination()));
     }
 
     @GetMapping("/{id}")

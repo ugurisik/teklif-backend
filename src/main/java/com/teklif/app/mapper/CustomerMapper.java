@@ -45,6 +45,8 @@ public interface CustomerMapper {
                 .id(customer.getId())
                 .companyName(customer.getCompanyName())
                 .contactPerson(customer.getContactPerson())
+                .email(customer.getEmail())
+                .phone(customer.getPhone())
                 .build();
     }
 }

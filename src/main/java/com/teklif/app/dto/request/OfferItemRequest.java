@@ -11,6 +11,7 @@ import java.math.BigDecimal;
 public class OfferItemRequest {
 
     private String productId;
+    private String id;
 
     @NotBlank(message = "Product name is required")
     private String productName;

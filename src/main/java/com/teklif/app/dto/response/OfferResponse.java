@@ -41,4 +41,9 @@ public class OfferResponse {
     private List<OfferItemResponse> items;
     private Instant createdAt;
     private Instant updatedAt;
+    private Boolean showTlEquivalent;
+    private Boolean showExchangeRateInfo;
+    private BigDecimal exchangeRate;
+    private Boolean passwordRequired;
+    private CompanyBasicResponse company;
 }

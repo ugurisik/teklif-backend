@@ -13,4 +13,6 @@ public class CustomerBasicResponse {
     private String id;
     private String companyName;
     private String contactPerson;
+    private String phone;
+    private String email;
 }

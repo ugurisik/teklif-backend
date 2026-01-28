@@ -4,6 +4,7 @@ import com.teklif.app.dto.request.LoginRequest;
 import com.teklif.app.dto.response.LoginResponse;
 import com.teklif.app.dto.response.UserResponse;
 import com.teklif.app.entity.User;
+import com.teklif.app.enums.LogType;
 import com.teklif.app.exception.CustomException;
 import com.teklif.app.mapper.UserMapper;
 import com.teklif.app.repository.UserRepository;
@@ -27,6 +28,7 @@ public class AuthService {
     private final UserRepository userRepository;
     private final JwtUtil jwtUtil;
     private final UserMapper userMapper;
+    private final ActivityLogService activityLogService;
 
     @Transactional
     public LoginResponse login(LoginRequest request) {
@@ -40,6 +42,12 @@ public class AuthService {
         // Update last login
         user.setLastLoginAt(Instant.now());
         userRepository.save(user);
+
+        // Create log
+        activityLogService.createLog(LogType.USER_LOGIN, user.getId(),
+                "Kullanıcı Girişi",
+                user.getEmail() + " kullanıcısı sisteme giriş yaptı",
+                null);
 
         // Generate token
         String token = jwtUtil.generateToken(

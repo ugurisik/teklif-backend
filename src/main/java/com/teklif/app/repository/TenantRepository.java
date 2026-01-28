@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
 import java.util.Optional;
 
 @Repository
@@ -28,4 +29,32 @@ public interface TenantRepository extends JpaRepository<Tenant, String> {
     );
 
     boolean existsBySlugAndIsDeletedFalse(String slug);
+
+    // Sub-tenant queries
+    @Query("SELECT t FROM Tenant t " +
+            "WHERE t.parentTenantId = :parentTenantId AND t.isDeleted = false")
+    List<Tenant> findByParentTenantId(@Param("parentTenantId") String parentTenantId);
+
+    @Query("SELECT COUNT(t) FROM Tenant t " +
+            "WHERE t.parentTenantId = :parentTenantId AND t.isDeleted = false")
+    long countByParentTenantId(@Param("parentTenantId") String parentTenantId);
+
+    // For TENANT_ADMIN: get tenant and its sub-tenants
+    @Query("SELECT t FROM Tenant t WHERE " +
+            "t.isDeleted = false AND (" +
+            "  t.id = :tenantId OR " +  // The tenant itself
+            "  t.parentTenantId = :tenantId" +  // Or its sub-tenants
+            ") AND (" +
+            "  :search IS NULL OR " +
+            "  LOWER(t.name) LIKE LOWER(CONCAT('%', :search, '%')) OR " +
+            "  LOWER(t.email) LIKE LOWER(CONCAT('%', :search, '%'))" +
+            ") AND (" +
+            "  :isActive IS NULL OR t.isActive = :isActive" +
+            ")")
+    Page<Tenant> findTenantAndSubTenantsWithFilters(
+            @Param("tenantId") String tenantId,
+            @Param("search") String search,
+            @Param("isActive") Boolean isActive,
+            Pageable pageable
+    );
 }

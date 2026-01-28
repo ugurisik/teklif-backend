@@ -1,5 +1,6 @@
 package com.teklif.app.service;
 
+import com.teklif.app.controller.OfferController;
 import com.teklif.app.dto.request.CreateOfferRequest;
 import com.teklif.app.dto.request.OfferItemRequest;
 import com.teklif.app.dto.response.OfferResponse;
@@ -7,17 +8,24 @@ import com.teklif.app.dto.response.PagedResponse;
 import com.teklif.app.dto.response.PaginationResponse;
 import com.teklif.app.entity.Offer;
 import com.teklif.app.entity.OfferItem;
+import com.teklif.app.entity.User;
+import com.teklif.app.enums.LogType;
+import com.teklif.app.enums.NotificationType;
 import com.teklif.app.enums.OfferStatus;
 import com.teklif.app.exception.CustomException;
 import com.teklif.app.mapper.OfferMapper;
 import com.teklif.app.repository.CustomerRepository;
 import com.teklif.app.repository.OfferRepository;
+import com.teklif.app.security.CustomUserDetails;
+import com.teklif.app.util.Func;
 import com.teklif.app.util.TenantContext;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,6 +34,7 @@ import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.List;
 
 @Service
@@ -35,6 +44,8 @@ public class OfferService {
     private final OfferRepository offerRepository;
     private final CustomerRepository customerRepository;
     private final OfferMapper offerMapper;
+    private final NotificationService notificationService;
+    private final ActivityLogService activityLogService;
 
     public PagedResponse<OfferResponse> getAllOffers(
             String search,
@@ -89,6 +100,8 @@ public class OfferService {
                 .currency(request.getCurrency())
                 .validUntil(request.getValidUntil())
                 .notes(request.getNotes())
+                .showTlEquivalent(request.getShowTlEquivalent() != null ? request.getShowTlEquivalent() : false)
+                .showExchangeRateInfo(request.getShowExchangeRateInfo() != null ? request.getShowExchangeRateInfo() : false)
                 .status(OfferStatus.DRAFT)
                 .build();
 
@@ -104,6 +117,7 @@ public class OfferService {
 
         for (OfferItemRequest itemReq : request.getItems()) {
             OfferItem item = createOfferItem(itemReq);
+            item.setOffer(offer);
             offer.getItems().add(item);
 
             subtotal = subtotal.add(item.getSubtotal());
@@ -116,10 +130,16 @@ public class OfferService {
 
         offer = offerRepository.save(offer);
 
-        // Set offer ID to items
-        for (OfferItem item : offer.getItems()) {
-            item.setOfferId(offer.getId());
-        }
+        // Create notification
+        createNotification(offer.getId(), tenantId, NotificationType.OFFER_CREATED,
+                "Yeni Teklif Oluşturuldu",
+                offer.getOfferNo() + " numaralı teklif taslak olarak oluşturuldu.");
+
+        // Create log
+        activityLogService.createLog(LogType.OFFER_CREATED, offer.getId(),
+                "Teklif Oluşturuldu",
+                offer.getOfferNo() + " numaralı teklif oluşturuldu. Toplam: " + offer.getTotal() + " " + offer.getCurrency(),
+                null);
 
         return offerMapper.toResponse(offer);
     }
@@ -161,9 +181,99 @@ public class OfferService {
     }
 
     private String generateOfferNo() {
-        String prefix = "TKL-" + LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd")) + "-";
+        String pref =generateOfferNoPrefix( (CustomUserDetails) SecurityContextHolder.getContext().getAuthentication().getPrincipal());
+        String prefix = pref+"-" + LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd")) + "-";
         long count = offerRepository.countByOfferNoPrefix(prefix);
         return prefix + String.format("%04d", count + 1);
+    }
+
+    private String generateOfferNoPrefix(CustomUserDetails cud) {
+        if (cud == null || cud.getUser() == null) {
+            return "USR";
+        }
+
+        User u = cud.getUser();
+        String firstName = Func.normalize(u.getFirstName());
+        String lastName  = Func.normalize(u.getLastName());
+
+        String prefix;
+
+        if (!firstName.isEmpty() && !lastName.isEmpty()) {
+            // F + L + L
+            prefix = ""
+                    + firstName.charAt(0)
+                    + lastName.charAt(0)
+                    + (lastName.length() > 1 ? lastName.charAt(1) : lastName.charAt(0));
+        }
+        else if (!firstName.isEmpty()) {
+            prefix = Func.padToThree(firstName);
+        }
+        else if (!lastName.isEmpty()) {
+            prefix = Func.padToThree(lastName);
+        }
+        else {
+            prefix = "USR";
+        }
+
+        return prefix.toUpperCase();
+    }
+
+
+    @Transactional
+    public OfferResponse updateOffer(String id, CreateOfferRequest request) {
+        String tenantId = TenantContext.getTenantId();
+        Offer offer = offerRepository.findByIdAndTenantIdAndIsDeletedFalse(id, tenantId)
+                .orElseThrow(() -> CustomException.notFound("Offer not found"));
+
+        // Validate customer
+        customerRepository.findByIdAndTenantIdAndIsDeletedFalse(request.getCustomerId(), tenantId)
+                .orElseThrow(() -> CustomException.notFound("Customer not found"));
+
+        // Update basic fields
+        offer.setCustomerId(request.getCustomerId());
+        offer.setCurrency(request.getCurrency());
+        offer.setValidUntil(request.getValidUntil());
+        offer.setNotes(request.getNotes());
+        offer.setShowTlEquivalent(request.getShowTlEquivalent() != null ? request.getShowTlEquivalent() : false);
+        offer.setShowExchangeRateInfo(request.getShowExchangeRateInfo() != null ? request.getShowExchangeRateInfo() : false);
+
+        // Update link settings
+        if (request.getLinkSettings() != null) {
+            offer.setLinkPassword(request.getLinkSettings().getPassword());
+            offer.setOneTimeView(request.getLinkSettings().getOneTimeView());
+        }
+
+        // Handle items - replace all items
+        offer.getItems().clear();
+
+        BigDecimal subtotal = BigDecimal.ZERO;
+        BigDecimal vatTotal = BigDecimal.ZERO;
+
+        for (OfferItemRequest itemReq : request.getItems()) {
+            OfferItem item = createOfferItem(itemReq);
+            item.setOffer(offer);
+            offer.getItems().add(item);
+
+            subtotal = subtotal.add(item.getSubtotal());
+            vatTotal = vatTotal.add(item.getVatAmount());
+        }
+
+        offer.setSubtotal(subtotal);
+        offer.setVatTotal(vatTotal);
+        offer.setTotal(subtotal.add(vatTotal));
+
+        offer = offerRepository.save(offer);
+
+
+        notificationService.createNotificationForOffer(offer.getId(), offer.getTenantId(), NotificationType.OFFER_UPDATED,"Teklif Güncellendi", offer.getOfferNo() + " numaralı teklif güncellendi. Yeni toplam: " + offer.getTotal() + " " + offer.getCurrency());
+
+        // Create log
+        activityLogService.createLog(LogType.OFFER_UPDATED, offer.getId(),
+                "Teklif Güncellendi",
+                offer.getOfferNo() + " numaralı teklif güncellendi. Yeni toplam: " + offer.getTotal() + " " + offer.getCurrency(),
+                null);
+
+        return offerMapper.toResponse(offer);
     }
 
     @Transactional
@@ -180,6 +290,17 @@ public class OfferService {
         offer.setSentAt(Instant.now());
 
         offer = offerRepository.save(offer);
+
+        // Create notification
+        createNotification(offer.getId(), tenantId, NotificationType.OFFER_SENT,
+                "Teklif Gönderildi",
+                offer.getOfferNo() + " numaralı teklif müşteriye gönderildi.");
+
+        // Create log
+        activityLogService.createLog(LogType.OFFER_SENT, offer.getId(),
+                "Teklif Gönderildi",
+                offer.getOfferNo() + " numaralı teklif müşteriye gönderildi.",
+                null);
 
         // TODO: Send email notification
 
@@ -219,6 +340,7 @@ public class OfferService {
                     .subtotal(originalItem.getSubtotal())
                     .vatAmount(originalItem.getVatAmount())
                     .total(originalItem.getTotal())
+                    .offer(duplicate)
                     .build();
 
             duplicate.getItems().add(duplicateItem);
@@ -226,10 +348,11 @@ public class OfferService {
 
         duplicate = offerRepository.save(duplicate);
 
-        // Set offer ID to items
-        for (OfferItem item : duplicate.getItems()) {
-            item.setOfferId(duplicate.getId());
-        }
+        // Create log
+        activityLogService.createLog(LogType.OFFER_DUPLICATED, duplicate.getId(),
+                "Teklif Çoğaltıldı",
+                duplicate.getOfferNo() + " numaralı teklif, " + original.getOfferNo() + " numaralı tekliften çoğaltıldı.",
+                null);
 
         return offerMapper.toResponse(duplicate);
     }
@@ -240,8 +363,15 @@ public class OfferService {
         Offer offer = offerRepository.findByIdAndTenantIdAndIsDeletedFalse(id, tenantId)
                 .orElseThrow(() -> CustomException.notFound("Offer not found"));
 
+        String offerNo = offer.getOfferNo();
         offer.setIsDeleted(true);
         offerRepository.save(offer);
+
+        // Create log
+        activityLogService.createLog(LogType.OFFER_DELETED, id,
+                "Teklif Silindi",
+                offerNo + " numaralı teklif silindi.",
+                null);
     }
 
     // Public methods (no auth required)
@@ -255,24 +385,50 @@ public class OfferService {
             throw CustomException.forbidden("This offer has already been viewed");
         }
 
+        OfferResponse response = new OfferResponse();
+        if(offer.getLinkPassword() != null) {
+            response.setPasswordRequired(true);
+        }else{
+            response = offerMapper.toResponse(offer);
+        }
+        return response;
+    }
+
+    public OfferResponse getOffer(String uuid){
+        Offer offer = offerRepository.findByUuidAndIsDeletedFalse(uuid)
+                .orElseThrow(() -> CustomException.notFound("Offer not found"));
         return offerMapper.toResponse(offer);
     }
 
+
     @Transactional
-    public void recordOfferView(String uuid, String viewerName) {
+    public boolean recordOfferView(String uuid, OfferController.ViewRequest request) {
         Offer offer = offerRepository.findByUuidAndIsDeletedFalse(uuid)
                 .orElseThrow(() -> CustomException.notFound("Offer not found"));
+
+        if(offer.getLinkPassword() != null && !offer.getLinkPassword().equals(request.getPassword())){
+            return false;
+        }
 
         if (!offer.getHasBeenViewed()) {
             offer.setStatus(OfferStatus.VIEWED);
             offer.setHasBeenViewed(true);
             offer.setViewedAt(Instant.now());
-            offer.setViewedBy(viewerName);
-
+            offer.setViewedBy(request.getName());
             offerRepository.save(offer);
 
-            // TODO: Send notification to user
+            // Create notification
+            createNotification(offer.getId(), offer.getTenantId(), NotificationType.OFFER_VIEWED,
+                    "Teklif Görüntülendi",
+                    offer.getOfferNo() + " numaralı teklif " + request.getName() + " tarafından görüntülendi.");
+
+            // Create log
+            activityLogService.createLog(LogType.OFFER_VIEWED, offer.getId(),
+                    "Teklif Görüntülendi",
+                    offer.getOfferNo() + " numaralı teklif " + request.getName() + " tarafından görüntülendi.",
+                    null);
         }
+        return true;
     }
 
     @Transactional
@@ -290,7 +446,16 @@ public class OfferService {
 
         offerRepository.save(offer);
 
-        // TODO: Send notification to user
+        // Create notification
+        createNotification(offer.getId(), offer.getTenantId(), NotificationType.OFFER_ACCEPTED,
+                "Teklif Kabul Edildi",
+                offer.getOfferNo() + " numaralı teklif " + acceptedBy + " tarafından kabul edildi.");
+
+        // Create log
+        activityLogService.createLog(LogType.OFFER_ACCEPTED, offer.getId(),
+                "Teklif Kabul Edildi",
+                offer.getOfferNo() + " numaralı teklif " + acceptedBy + " tarafından kabul edildi.",
+                null);
     }
 
     @Transactional
@@ -309,6 +474,21 @@ public class OfferService {
 
         offerRepository.save(offer);
 
-        // TODO: Send notification to user
+        // Create notification
+        createNotification(offer.getId(), offer.getTenantId(), NotificationType.OFFER_REJECTED,
+                "Teklif Reddedildi",
+                offer.getOfferNo() + " numaralı teklif " + rejectedBy + " tarafından reddedildi." +
+                        (note != null && !note.isEmpty() ? " Not: " + note : ""));
+
+        // Create log
+        activityLogService.createLog(LogType.OFFER_REJECTED, offer.getId(),
+                "Teklif Reddedildi",
+                offer.getOfferNo() + " numaralı teklif " + rejectedBy + " tarafından reddedildi." +
+                        (note != null && !note.isEmpty() ? " Not: " + note : ""),
+                null);
+    }
+
+    private void createNotification(String offerId, String tenantId, NotificationType type, String title, String message) {
+        notificationService.createNotificationForOffer(offerId, tenantId, type, title, message);
     }
 }

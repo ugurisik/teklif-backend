@@ -6,6 +6,7 @@ import com.teklif.app.dto.response.PagedResponse;
 import com.teklif.app.dto.response.PaginationResponse;
 import com.teklif.app.dto.response.UserResponse;
 import com.teklif.app.entity.User;
+import com.teklif.app.enums.LogType;
 import com.teklif.app.enums.Role;
 import com.teklif.app.exception.CustomException;
 import com.teklif.app.mapper.UserMapper;
@@ -29,6 +30,7 @@ public class UserService {
     private final UserRepository userRepository;
     private final UserMapper userMapper;
     private final PasswordEncoder passwordEncoder;
+    private final ActivityLogService activityLogService;
 
     public PagedResponse<UserResponse> getAllUsers(
             String search,
@@ -40,9 +42,31 @@ public class UserService {
         String tenantId = TenantContext.getTenantId();
         Pageable pageable = PageRequest.of(page - 1, limit, Sort.by("createdAt").descending());
 
-        Page<User> userPage = userRepository.findAllWithFilters(
-                tenantId, search, role, isActive, pageable
-        );
+        // Kullanıcının rolünü kontrol et
+        org.springframework.security.core.Authentication authentication =
+                org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        Page<User> userPage;
+
+        if (authentication != null && authentication.getPrincipal() instanceof com.teklif.app.security.CustomUserDetails) {
+            com.teklif.app.security.CustomUserDetails userDetails =
+                    (com.teklif.app.security.CustomUserDetails) authentication.getPrincipal();
+            Role userRole = userDetails.getUser().getRole();
+
+            // TENANT_ADMIN ise kendi tenantı ve alt tenantlarındaki kullanıcıları getir
+            if (userRole == Role.TENANT_ADMIN) {
+                userPage = userRepository.findUsersInTenantAndSubTenants(
+                        tenantId, search, role, isActive, pageable
+                );
+            } else {
+                // SUPER_ADMIN ise tüm kullanıcıları getir (tenantId null yaparak)
+                userPage = userRepository.findAllWithFilters(
+                        null, search, role, isActive, pageable
+                );
+            }
+        } else {
+            // Authentication yoksa boş sonuç
+            userPage = Page.empty();
+        }
 
         List<UserResponse> items = userPage.getContent().stream()
                 .map(userMapper::toResponse)
@@ -85,6 +109,13 @@ public class UserService {
         user.setPassword(passwordEncoder.encode(request.getPassword()));
 
         user = userRepository.save(user);
+
+        // Create log
+        activityLogService.createLog(LogType.USER_CREATED, user.getId(),
+                "Kullanıcı Oluşturuldu",
+                user.getEmail() + " e-posta adresli kullanıcı oluşturuldu",
+                null);
+
         return userMapper.toResponse(user);
     }
 
@@ -101,6 +132,12 @@ public class UserService {
         userMapper.updateEntity(request, user);
         user = userRepository.save(user);
 
+        // Create log
+        activityLogService.createLog(LogType.USER_UPDATED, user.getId(),
+                "Kullanıcı Güncellendi",
+                user.getEmail() + " e-posta adresli kullanıcı güncellendi",
+                null);
+
         return userMapper.toResponse(user);
     }
 
@@ -114,8 +151,16 @@ public class UserService {
             throw CustomException.forbidden("Access denied");
         }
 
+        String userEmail = user.getEmail();
+
         user.setIsDeleted(true);
         userRepository.save(user);
+
+        // Create log
+        activityLogService.createLog(LogType.USER_DELETED, id,
+                "Kullanıcı Silindi",
+                userEmail + " e-posta adresli kullanıcı silindi",
+                null);
     }
 
     @Transactional
@@ -130,6 +175,12 @@ public class UserService {
 
         user.setIsActive(!user.getIsActive());
         user = userRepository.save(user);
+
+        // Create log
+        activityLogService.createLog(LogType.USER_UPDATED, user.getId(),
+                "Kullanıcı Durumu Değiştirildi",
+                user.getEmail() + " e-posta adresli kullanıcı durumu " + (user.getIsActive() ? "aktif" : "pasif") + " yapıldı",
+                null);
 
         return userMapper.toResponse(user);
     }

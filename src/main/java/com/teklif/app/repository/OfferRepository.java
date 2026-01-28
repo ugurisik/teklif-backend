@@ -16,13 +16,27 @@ import java.util.Optional;
 @Repository
 public interface OfferRepository extends JpaRepository<Offer, String> {
 
-    Optional<Offer> findByIdAndTenantIdAndIsDeletedFalse(String id, String tenantId);
+    @Query("SELECT o FROM Offer o " +
+            "LEFT JOIN FETCH o.customer " +
+            "LEFT JOIN FETCH o.tenant " +
+            "WHERE o.id = :id AND o.tenantId = :tenantId AND o.isDeleted = false")
+    Optional<Offer> findByIdAndTenantIdAndIsDeletedFalse(@Param("id") String id, @Param("tenantId") String tenantId);
 
-    Optional<Offer> findByUuidAndIsDeletedFalse(String uuid);
+    @Query("SELECT o from Offer o where o.id = :id")
+    Optional<Offer> findById(@Param("id") String id);
 
-    @Query("SELECT o FROM Offer o WHERE o.isDeleted = false " +
+    @Query("SELECT o FROM Offer o " +
+            "LEFT JOIN FETCH o.customer " +
+            "LEFT JOIN FETCH o.tenant " +
+            "WHERE o.uuid = :uuid AND o.isDeleted = false")
+    Optional<Offer> findByUuidAndIsDeletedFalse(@Param("uuid") String uuid);
+
+    @Query("SELECT o FROM Offer o " +
+            "LEFT JOIN FETCH o.customer " +
+            "LEFT JOIN FETCH o.tenant " +
+            "WHERE o.isDeleted = false " +
             "AND o.tenantId = :tenantId " +
-            "AND (:search IS NULL OR LOWER(o.offerNo) LIKE LOWER(CONCAT('%', :search, '%'))) " +
+            "AND (:search IS NULL OR LOWER(o.offerNo) LIKE CONCAT('%', LOWER(:search), '%')) " +
             "AND (:status IS NULL OR o.status = :status) " +
             "AND (:customerId IS NULL OR o.customerId = :customerId) " +
             "AND (:startDate IS NULL OR o.createdAt >= :startDate) " +

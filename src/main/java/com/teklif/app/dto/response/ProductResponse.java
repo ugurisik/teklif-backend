@@ -7,6 +7,7 @@ import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 
 @Data
 @Builder
@@ -24,6 +25,7 @@ public class ProductResponse {
     private String unit;
     private String category;
     private Boolean isActive;
+    private List<ProductFileResponse> files;
     private Instant createdAt;
     private Instant updatedAt;
 }

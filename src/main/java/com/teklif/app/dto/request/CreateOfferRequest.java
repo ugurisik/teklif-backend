@@ -23,6 +23,10 @@ public class CreateOfferRequest {
 
     private OfferLinkSettings linkSettings;
 
+    private Boolean showTlEquivalent = false;
+
+    private Boolean showExchangeRateInfo = false;
+
     @NotEmpty(message = "At least one item is required")
     private List<OfferItemRequest> items;
 }

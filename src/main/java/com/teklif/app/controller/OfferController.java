@@ -1,9 +1,11 @@
 package com.teklif.app.controller;
 
 import com.teklif.app.dto.request.CreateOfferRequest;
+import com.teklif.app.dto.request.ProductRequest;
 import com.teklif.app.dto.response.ApiResponse;
 import com.teklif.app.dto.response.OfferResponse;
 import com.teklif.app.dto.response.PagedResponse;
+import com.teklif.app.dto.response.ProductResponse;
 import com.teklif.app.enums.OfferStatus;
 import com.teklif.app.service.OfferService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -40,7 +42,7 @@ public class OfferController {
         PagedResponse<OfferResponse> response = offerService.getAllOffers(
                 search, status, customerId, startDate, endDate, page, limit
         );
-        return ResponseEntity.ok(ApiResponse.success((PagedResponse<OfferResponse>) response.getItems(), response.getPagination()));
+        return ResponseEntity.ok(ApiResponse.success(response, response.getPagination()));
     }
 
     @GetMapping("/{id}")
@@ -78,6 +80,16 @@ public class OfferController {
         return ResponseEntity.ok(ApiResponse.successWithMessage("Offer deleted successfully"));
     }
 
+    @PutMapping("/{id}")
+    @Operation(summary = "Update offer")
+    public ResponseEntity<ApiResponse<OfferResponse>> updateOffer(
+            @PathVariable String id,
+            @Valid @RequestBody CreateOfferRequest request
+    ) {
+        OfferResponse response = offerService.updateOffer(id, request);
+        return ResponseEntity.ok(ApiResponse.success(response));
+    }
+
     // Public endpoints (no authentication required)
 
     @GetMapping("/public/{uuid}")
@@ -89,12 +101,16 @@ public class OfferController {
 
     @PostMapping("/public/{uuid}/view")
     @Operation(summary = "Record offer view")
-    public ResponseEntity<ApiResponse<Void>> recordOfferView(
+    public ResponseEntity<ApiResponse<OfferResponse>> recordOfferView(
             @PathVariable String uuid,
             @RequestBody ViewRequest request
     ) {
-        offerService.recordOfferView(uuid, request.getName());
-        return ResponseEntity.ok(ApiResponse.successWithMessage("View recorded successfully"));
+        if(offerService.recordOfferView(uuid, request)){
+            OfferResponse response = offerService.getOffer(uuid);
+            return ResponseEntity.ok(ApiResponse.success(response));
+        }else{
+            return ResponseEntity.ok(ApiResponse.error("Hatalı şifre girildi!"));
+        }
     }
 
     @PostMapping("/public/{uuid}/accept")
@@ -118,7 +134,8 @@ public class OfferController {
     }
 
     @Data
-    static class ViewRequest {
+    public static class ViewRequest {
+        private String password;
         private String name;
     }
 

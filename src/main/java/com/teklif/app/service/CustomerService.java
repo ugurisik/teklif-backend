@@ -6,6 +6,7 @@ import com.teklif.app.dto.response.PagedResponse;
 import com.teklif.app.dto.response.PaginationResponse;
 import com.teklif.app.entity.Customer;
 import com.teklif.app.enums.CustomerType;
+import com.teklif.app.enums.LogType;
 import com.teklif.app.exception.CustomException;
 import com.teklif.app.mapper.CustomerMapper;
 import com.teklif.app.repository.CustomerRepository;
@@ -26,6 +27,15 @@ public class CustomerService {
 
     private final CustomerRepository customerRepository;
     private final CustomerMapper customerMapper;
+    private final ActivityLogService activityLogService;
+
+    private String getCustomerDisplayName(Customer customer) {
+        if (customer.getType() == CustomerType.COMPANY) {
+            return customer.getCompanyName();
+        } else {
+            return customer.getFirstName() + " " + customer.getLastName();
+        }
+    }
 
     public PagedResponse<CustomerResponse> getAllCustomers(
             String search,
@@ -71,6 +81,13 @@ public class CustomerService {
         customer.setTenantId(tenantId);
 
         customer = customerRepository.save(customer);
+
+        // Create log
+        activityLogService.createLog(LogType.CUSTOMER_CREATED, customer.getId(),
+                "Müşteri Oluşturuldu",
+                getCustomerDisplayName(customer) + " isimli müşteri oluşturuldu",
+                null);
+
         return customerMapper.toResponse(customer);
     }
 
@@ -83,6 +100,12 @@ public class CustomerService {
         customerMapper.updateEntity(request, customer);
         customer = customerRepository.save(customer);
 
+        // Create log
+        activityLogService.createLog(LogType.CUSTOMER_UPDATED, customer.getId(),
+                "Müşteri Güncellendi",
+                getCustomerDisplayName(customer) + " isimli müşteri güncellendi",
+                null);
+
         return customerMapper.toResponse(customer);
     }
 
@@ -92,7 +115,15 @@ public class CustomerService {
         Customer customer = customerRepository.findByIdAndTenantIdAndIsDeletedFalse(id, tenantId)
                 .orElseThrow(() -> CustomException.notFound("Customer not found"));
 
+        String customerName = getCustomerDisplayName(customer);
+
         customer.setIsDeleted(true);
         customerRepository.save(customer);
+
+        // Create log
+        activityLogService.createLog(LogType.CUSTOMER_DELETED, id,
+                "Müşteri Silindi",
+                customerName + " isimli müşteri silindi",
+                null);
     }
 }

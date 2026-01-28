@@ -15,9 +15,6 @@ import java.math.BigDecimal;
 @SuperBuilder
 public class OfferItem extends BaseEntity {
 
-    @Column(nullable = false)
-    private String offerId;
-
     private String productId;
 
     @Column(nullable = false)
@@ -51,8 +48,8 @@ public class OfferItem extends BaseEntity {
     @Column(nullable = false, precision = 19, scale = 4)
     private BigDecimal total;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "offerId", insertable = false, updatable = false)
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "parent_id", nullable = false)
     private Offer offer;
 
     @ManyToOne(fetch = FetchType.LAZY)

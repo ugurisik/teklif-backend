@@ -1,5 +1,6 @@
 package com.teklif.app.dto.request;
 
+import jakarta.annotation.Nullable;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
@@ -18,11 +19,9 @@ public class ProductRequest {
 
     private String description;
 
-    @NotNull(message = "Unit price is required")
     @Positive(message = "Unit price must be positive")
     private BigDecimal unitPrice;
 
-    @NotBlank(message = "Currency is required")
     private String currency;
 
     @NotNull(message = "VAT rate is required")

@@ -5,6 +5,9 @@ import jakarta.persistence.*;
 import lombok.*;
 import lombok.experimental.SuperBuilder;
 
+import java.util.ArrayList;
+import java.util.List;
+
 @Entity
 @Table(name = "notifications")
 @Getter
@@ -15,29 +18,30 @@ import lombok.experimental.SuperBuilder;
 public class Notification extends BaseEntity {
 
     @Column(nullable = false)
-    private String userId;
+    private String title;
+
+    @Column(nullable = false, columnDefinition = "TEXT")
+    private String message;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private NotificationType type;
 
     @Column(nullable = false)
-    private String title;
-
-    @Column(nullable = false, columnDefinition = "TEXT")
-    private String message;
-
-    private String offerId;
-
-    @Column(nullable = false)
-    @Builder.Default
-    private Boolean isRead = false;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "userId", insertable = false, updatable = false)
-    private User user;
+    private String tenantId;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "offerId", insertable = false, updatable = false)
     private Offer offer;
+
+    @Column(name = "offerId")
+    private String offerId;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "tenantId", insertable = false, updatable = false)
+    private Tenant tenant;
+
+    @OneToMany(mappedBy = "notification", cascade = CascadeType.ALL, orphanRemoval = true)
+    @Builder.Default
+    private List<NotificationRead> reads = new ArrayList<>();
 }

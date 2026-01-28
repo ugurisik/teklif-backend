@@ -32,7 +32,7 @@ public class CustomerController {
             @RequestParam(defaultValue = "20") int limit
     ) {
         PagedResponse<CustomerResponse> response = customerService.getAllCustomers(search, type, isActive, page, limit);
-        return ResponseEntity.ok(ApiResponse.success((PagedResponse<CustomerResponse>) response.getItems(), response.getPagination()));
+        return ResponseEntity.ok(ApiResponse.success(response, response.getPagination()));
     }
 
     @GetMapping("/{id}")

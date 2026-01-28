@@ -45,6 +45,9 @@ public class Offer extends BaseEntity {
     private BigDecimal vatTotal;
 
     @Column(nullable = false, precision = 19, scale = 4)
+    private BigDecimal exchangeRate;
+
+    @Column(nullable = false, precision = 19, scale = 4)
     private BigDecimal total;
 
     @Column(nullable = false, length = 3)
@@ -65,6 +68,14 @@ public class Offer extends BaseEntity {
     @Column(nullable = false)
     @Builder.Default
     private Boolean hasBeenViewed = false;
+
+    @Column(nullable = false)
+    @Builder.Default
+    private Boolean showTlEquivalent = false;
+
+    @Column(nullable = false)
+    @Builder.Default
+    private Boolean showExchangeRateInfo = false;
 
     // Activity tracking
     private Instant sentAt;
@@ -94,5 +105,27 @@ public class Offer extends BaseEntity {
         if (uuid == null) {
             uuid = UUID.randomUUID().toString();
         }
+
+        if(getCreatedAt() == null){
+            setCreatedAt(Instant.now());
+        }
+
+        if(getExchangeRate() == null){
+            setExchangeRate(BigDecimal.ZERO);
+        }
+
+        if(getUpdatedAt() == null){
+            setUpdatedAt(Instant.now());
+        }
+
+        if(getIsDeleted() == null){
+            setIsDeleted(false);
+        }
+
+    }
+
+    @PreUpdate
+    public void preUpdate() {
+        setUpdatedAt(Instant.now());
     }
 }

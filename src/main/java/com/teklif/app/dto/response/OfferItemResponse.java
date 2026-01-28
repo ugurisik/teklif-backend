@@ -6,6 +6,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 @Data
 @Builder
@@ -24,4 +25,5 @@ public class OfferItemResponse {
     private BigDecimal subtotal;
     private BigDecimal vatAmount;
     private BigDecimal total;
+    private List<ProductFileResponse> files;
 }
