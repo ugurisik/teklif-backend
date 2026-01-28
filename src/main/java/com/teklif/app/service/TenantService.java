@@ -42,12 +42,9 @@ public class TenantService {
 
     private String getCurrentUserId() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (authentication != null && authentication.getPrincipal() instanceof UserDetails) {
-            // CustomUserDetails'dan userId al
-            UserDetails userDetails = (UserDetails) authentication.getPrincipal();
-            // JWT'den userId'yi almak için JwtUtil kullanabiliriz veya CustomUserDetails'e cast edebiliriz
-            // Şimdilik basit bir approach kullanıyoruz
-            return null; // TODO: JWT'den userId al
+        if (authentication != null && authentication.getPrincipal() instanceof CustomUserDetails) {
+            CustomUserDetails userDetails = (CustomUserDetails) authentication.getPrincipal();
+            return userDetails.getUserId();
         }
         return null;
     }
@@ -377,8 +374,9 @@ public class TenantService {
         UserTenant userTenant = userTenantRepository.findByUserIdAndTenantId(userId, tenantId)
                 .orElseThrow(() -> CustomException.notFound("Assignment not found"));
 
-       // userTenant.setIsDeleted(true);
-        userTenantRepository.delete(userTenant);
+        // Use soft delete instead of hard delete
+        userTenant.setIsDeleted(true);
+        userTenantRepository.save(userTenant);
     }
 
     @Transactional
