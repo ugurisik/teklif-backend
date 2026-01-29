@@ -6,6 +6,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
@@ -15,6 +16,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 @Slf4j
 @Component
+@Order(1)
 public class RateLimitFilter extends OncePerRequestFilter {
 
     @Value("${security.rate-limit.enabled:true}")
